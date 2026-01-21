@@ -1,0 +1,9 @@
+source 'https://rubygems.org'
+
+gem 'rack'
+gem 'rackup'  # Required for Rack 3.x
+gem 'puma'
+gem 'faraday'
+gem 'faraday-retry'
+gem 'concurrent-ruby'
+gem 'oj'  # Быстрый JSON
