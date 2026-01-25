@@ -1,10 +1,13 @@
 require 'faraday'
 require 'oj'
+require 'thread'
 
 module Gateway
   class Proxy
     def initialize
       @connections = {}
+      @connection_counts = Hash.new(0)
+      @mutex = Mutex.new
     end
 
     def call(env)
@@ -15,29 +18,46 @@ module Gateway
                 ['{"error": "internal_error", "message": "No backend configured"}']]
       end
 
-      # Проксируем запрос
-      response = proxy_request(backend, env)
+      Gateway::ConnectionTracker.increment(backend)
+      @mutex.synchronize { @connection_counts[backend] += 1 }
 
-      # Формируем Rack response
-      headers = {}
-      response.headers.each do |key, value|
-        headers[key.downcase] = value
+      begin
+        response = proxy_request(backend, env)
+
+        headers = {}
+        response.headers.each do |key, value|
+          headers[key.downcase] = value
+        end
+        headers.delete('transfer-encoding')
+
+        [response.status, headers, [response.body || '']]
+      rescue Faraday::Error => e
+        if e.wrapped_exception.is_a?(Net::CircuitOpenError)
+          raise Semian::OpenCircuitError.new("Circuit open for #{backend}")
+        end
+        handle_proxy_error(e)
+      ensure
+        @mutex.synchronize { @connection_counts[backend] -= 1 }
+        Gateway::ConnectionTracker.decrement(backend)
       end
-      headers.delete('transfer-encoding')  # Rack сам управляет
-
-      [response.status, headers, [response.body || '']]
-    rescue Faraday::Error => e
-      if e.wrapped_exception.is_a?(Net::CircuitOpenError)
-        raise Semian::OpenCircuitError.new("Circuit open for #{env['gateway.backend']}")
-      end
-
-      handle_proxy_error(e)
     end
 
     private
 
+    def adaptive_timeout(backend)
+      base_timeout = 5
+      current_load = @connection_counts[backend]
+
+      timeout = base_timeout * (1 + current_load / 20.0)
+
+      puts "[TIMEOUT DEBUG] Backend: #{backend} | Load: #{current_load} | Applied Timeout: #{timeout.round(2)}s"
+      timeout
+    end
+
     def proxy_request(backend, env)
       conn = connection_for(backend)
+
+      conn.options.timeout = adaptive_timeout(backend)
 
       method = env['REQUEST_METHOD'].downcase.to_sym
       path = env['PATH_INFO']
@@ -49,7 +69,6 @@ module Gateway
 
     def connection_for(backend)
       @connections[backend] ||= Faraday.new(url: backend) do |f|
-        f.options.timeout = 10
         f.options.open_timeout = 5
         f.adapter :net_http
       end
