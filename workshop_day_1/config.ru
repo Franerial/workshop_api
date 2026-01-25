@@ -8,7 +8,7 @@ require_relative 'lib/gateway/load_balancer'
 require_relative 'lib/gateway/health_endpoint'
 require_relative 'lib/gateway/middleware/request_transformer'
 require_relative 'lib/gateway/middleware/response_transformer'
-require_relative 'lib/gateway/middleware/circuit_breaker'
+require_relative 'lib/gateway/middleware/semian_circuit_breaker'
 require_relative 'lib/gateway/router'
 require_relative 'lib/gateway/proxy'
 
@@ -29,5 +29,5 @@ use Gateway::HealthEndpoint, health_checker: health_checker
 use Gateway::Middleware::RequestTransformer
 use Gateway::Middleware::ResponseTransformer
 use Gateway::Router, health_checker: health_checker, load_balancer: load_balancer
-use Gateway::Middleware::CircuitBreaker
+use Gateway::Middleware::SemianCircuitBreaker
 run Gateway::Proxy.new

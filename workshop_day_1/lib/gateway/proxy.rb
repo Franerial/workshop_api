@@ -27,6 +27,10 @@ module Gateway
 
       [response.status, headers, [response.body || '']]
     rescue Faraday::Error => e
+      if e.wrapped_exception.is_a?(Net::CircuitOpenError)
+        raise Semian::OpenCircuitError.new("Circuit open for #{env['gateway.backend']}")
+      end
+
       handle_proxy_error(e)
     end
 
