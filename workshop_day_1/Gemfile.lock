@@ -25,6 +25,8 @@ GEM
     rack (3.2.4)
     rackup (2.3.1)
       rack (>= 3)
+    semian (0.26.6)
+      concurrent-ruby
     uri (1.1.1)
 
 PLATFORMS
@@ -38,6 +40,7 @@ DEPENDENCIES
   puma
   rack
   rackup
+  semian
 
 BUNDLED WITH
    2.4.10

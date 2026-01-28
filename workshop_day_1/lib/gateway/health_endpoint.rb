@@ -17,6 +17,8 @@ module Gateway
         liveness_response
       when '/health/ready'
         readiness_response
+      when '/health/circuits'
+        circuits_status_response
       else
         @app.call(env)
       end
@@ -79,6 +81,29 @@ module Gateway
 
     def process_uptime
       "#{(Time.now - $gateway_start_time).round}s" if defined?($gateway_start_time)
+    end
+
+    def circuits_status_response
+      circuits = {}
+
+      resources_table = Semian.resources.instance_variable_get(:@table)
+
+      resources_table.each do |name, resource|
+        cb = resource.circuit_breaker
+        next unless cb
+
+        state_obj = cb.instance_variable_get(:@state)
+        errors_window = cb.instance_variable_get(:@errors)
+        successes_obj = cb.instance_variable_get(:@successes)
+
+        circuits[name] = {
+          state: state_obj.value.to_s,
+          error_count: errors_window.size,
+          success_count: successes_obj.instance_variable_get(:@atom).value
+        }
+      end
+
+      [200, { 'content-type' => 'application/json' }, [circuits.to_json]]
     end
   end
 end

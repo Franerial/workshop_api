@@ -24,6 +24,9 @@ module Gateway
 
     def call(env)
       path = env['PATH_INFO']
+
+      return metrics_response if path == '/metrics'
+
       route = find_route(path)
 
       unless route
@@ -55,6 +58,27 @@ module Gateway
     end
 
     private
+
+    def metrics_response
+      lines = []
+
+      resources_table = Semian.resources.instance_variable_get(:@table)
+      resources_table.each do |name, resource|
+        cb = resource.circuit_breaker
+        next unless cb
+
+        state_value = cb.instance_variable_get(:@state).value
+        is_open = (state_value == :open ? 1 : 0)
+        error_count = cb.instance_variable_get(:@errors).size
+        
+        lines << "semian_circuit_open{service=\"#{name}\"} #{is_open}"
+        lines << "semian_circuit_errors{service=\"#{name}\"} #{error_count}"
+      end
+
+      response_body = lines.any? ? lines.join("\n") + "\n" : ""
+
+      [200, { 'content-type' => 'text/plain; version=0.0.4' }, [response_body]]
+    end
 
     def find_route(path)
       ROUTES.find { |pattern, _| path.match?(pattern) }&.last
