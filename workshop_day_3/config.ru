@@ -55,6 +55,8 @@ map '/api/users' do
 
       # Используем кэш с тегами
       user = TAGGED_CACHE.fetch("user:#{user_id}", tags: ['users', "user:#{user_id}"]) do
+        puts ">>> CACHE MISS: Fetching user #{user_id} from database"
+        puts ">>> CACHE MISS: Fetching user #{user_id} from database"
         LOGGER.info("Fetching user from database", user_id: user_id)
         { id: user_id.to_i, name: "User #{user_id}", email: "user#{user_id}@example.com" }
       end
@@ -89,8 +91,27 @@ end
 # Cache stats endpoint
 map '/cache/stats' do
   run proc { |env|
-    stats = CACHE.stats
+    stats = {
+      multi_layer: CACHE.stats,
+      tagged: TAGGED_CACHE.stats
+    }
     [200, { 'content-type' => 'application/json' }, [Oj.dump(stats)]]
+  }
+end
+
+# Cache invalidate endpoint
+map '/cache/invalidate' do
+  run proc { |env|
+    query = Rack::Utils.parse_query(env['QUERY_STRING'])
+    tag = query['tag']
+
+    if tag && !tag.empty?
+      TAGGED_CACHE.invalidate_tag(tag)
+      LOGGER.info("Cache invalidated", tag: tag)
+      [200, { 'content-type' => 'application/json' }, [Oj.dump({ invalidated: tag })]]
+    else
+      [400, { 'content-type' => 'application/json' }, [Oj.dump({ error: "Missing 'tag' parameter" })]]
+    end
   }
 end
 

@@ -2,6 +2,7 @@
 
 require 'oj'
 require 'securerandom'
+require 'concurrent'
 
 module Cache
   class TaggedCache
@@ -9,14 +10,20 @@ module Cache
 
     def initialize(redis_pool)
       @redis_pool = redis_pool
+      @hits = Concurrent::AtomicFixnum.new(0)
+      @misses = Concurrent::AtomicFixnum.new(0)
     end
 
     def fetch(key, tags: [], expires_in: 3600, &block)
       # Check if cached value exists and is valid
       cached = read(key, tags)
-      return cached if cached
+      if cached
+        @hits.increment
+        return cached
+      end
 
-      # Generate new value
+      # Cache miss — generate new value
+      @misses.increment
       value = yield
 
       # Write with tags
@@ -98,6 +105,15 @@ module Cache
     # Получить текущие версии тегов
     def tag_versions(tags)
       get_tag_versions(tags)
+    end
+
+    def stats
+      total = @hits.value + @misses.value
+      {
+        hits: @hits.value,
+        misses: @misses.value,
+        hit_rate: total > 0 ? (@hits.value.to_f / total * 100).round(2) : 0
+      }
     end
 
     private
