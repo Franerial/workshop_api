@@ -142,9 +142,10 @@ module Observability
 
   # Middleware для сбора метрик запросов
   class MetricsMiddleware
-    def initialize(app, metrics:)
+    def initialize(app, metrics:, caches: {})
       @app = app
       @metrics = metrics
+      @caches = caches
     end
 
     def call(env)
@@ -159,6 +160,8 @@ module Observability
         # Record metrics
         record_request_metrics(method, path, status, duration)
 
+        update_cache_metrics
+
         [status, headers, body]
       rescue => e
         duration = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
@@ -171,6 +174,18 @@ module Observability
     end
 
     private
+
+    def update_cache_metrics
+      # Update gauge for MultiLayer Cache
+      if (multi_cache = @caches[:multi])
+        @metrics.gauge('cache_hit_rate', multi_cache.stats[:hit_rate], tags: { type: 'multi_layer' })
+      end
+
+      # Update gauge for Tagged Cache
+      if (tagged_cache = @caches[:tagged])
+        @metrics.gauge('cache_hit_rate', tagged_cache.stats[:hit_rate], tags: { type: 'tagged' })
+      end
+    end
 
     def record_request_metrics(method, path, status, duration)
       tags = { method: method, path: path, status: status, status_class: "#{status / 100}xx" }

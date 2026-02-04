@@ -33,7 +33,9 @@ use Observability::MetricsEndpoint, metrics: METRICS, path: '/metrics'
 use Observability::CorrelationMiddleware
 
 # Metrics collection
-use Observability::MetricsMiddleware, metrics: METRICS
+use Observability::MetricsMiddleware, 
+    metrics: METRICS, 
+    caches: { multi: CACHE, tagged: TAGGED_CACHE }
 
 # Request logging
 use Observability::RequestLoggerMiddleware, logger: LOGGER
@@ -49,34 +51,45 @@ end
 map '/api/users' do
   run proc { |env|
     path = env['PATH_INFO']
+    cache_hit = true
 
     if match = path.match(%r{^/(\d+)$})
       user_id = match[1]
 
-      # Используем кэш с тегами
       user = TAGGED_CACHE.fetch("user:#{user_id}", tags: ['users', "user:#{user_id}"]) do
-        puts ">>> CACHE MISS: Fetching user #{user_id} from database"
-        puts ">>> CACHE MISS: Fetching user #{user_id} from database"
+        cache_hit = false
         LOGGER.info("Fetching user from database", user_id: user_id)
         { id: user_id.to_i, name: "User #{user_id}", email: "user#{user_id}@example.com" }
       end
 
-      [200, { 'content-type' => 'application/json' }, [Oj.dump(user)]]
+      headers = { 
+        'content-type' => 'application/json',
+        'x-cache' => (cache_hit ? 'HIT' : 'MISS')
+      }
+      [200, headers, [Oj.dump(user)]]
     else
-      # Список пользователей
+      cache_hit = true 
       users = TAGGED_CACHE.fetch("users:list", tags: ['users']) do
+        cache_hit = false
         LOGGER.info("Fetching users list from database")
         (1..10).map { |i| { id: i, name: "User #{i}" } }
       end
 
-      [200, { 'content-type' => 'application/json' }, [Oj.dump(users)]]
+      headers = { 
+        'content-type' => 'application/json',
+        'x-cache' => (cache_hit ? 'HIT' : 'MISS')
+      }
+      [200, headers, [Oj.dump(users)]]
     end
   }
 end
 
 map '/api/orders' do
   run proc { |env|
+    cache_hit = true
+
     orders = CACHE.fetch("orders:recent", expires_in: 60) do
+      cache_hit = false
       LOGGER.info("Fetching orders from database")
       [
         { id: 1, total: 99.99, status: 'completed' },
@@ -84,7 +97,12 @@ map '/api/orders' do
       ]
     end
 
-    [200, { 'content-type' => 'application/json' }, [Oj.dump(orders)]]
+    headers = { 
+      'content-type' => 'application/json',
+      'x-cache' => (cache_hit ? 'HIT' : 'MISS')
+    }
+
+    [200, headers, [Oj.dump(orders)]]
   }
 end
 
