@@ -182,14 +182,20 @@ module Cache
 
       # L1 check
       l1_result = l1_get(key)
-      return l1_result if l1_result
+      if l1_result
+        @metrics.record_hit(:l1, key)
+        return l1_result
+      end
 
       # L2 check
       l2_result = l2_get(key)
       if l2_result
+        @metrics.record_hit(:l2, key)
         l1_set(key, l2_result, l1_ttl)
         return l2_result
       end
+
+      @metrics.record_miss(key)
 
       # Cache miss — need to generate, but with lock
       acquire_generation_lock(key) do

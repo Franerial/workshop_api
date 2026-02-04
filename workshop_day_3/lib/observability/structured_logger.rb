@@ -129,7 +129,7 @@ module Observability
         status_class: "#{status / 100}xx",
         duration_ms: (duration * 1000).round(2),
         rate_limited: status == 429,
-        cache_hit: headers['X-Cache'] == 'HIT',
+        cache_hit: headers['x-cache'] == 'HIT',
         user_id: RequestStore.store[:user_id]
       )
     end
