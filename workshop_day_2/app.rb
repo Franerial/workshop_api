@@ -70,7 +70,7 @@ class ApiGatewayApp < Sinatra::Base
     User.create!(
       email: 'business@example.com',
       password_hash: BCrypt::Password.create('password'),
-      scopes: ['read', 'write', 'admin'],
+      scopes: ['read:orders', 'write:orders', 'admin'],
       tier: 'business'
     )
 
@@ -305,8 +305,9 @@ class ApiGatewayApp < Sinatra::Base
   ### Protected API Endpoints (с rate limiting) ###
 
   get '/api/orders' do
-    authenticate_api_key!
-    check_rate_limits!
+    # using Middleware::JwtAuth instead
+    # authenticate_api_key!
+    # check_rate_limits!
 
     # Симуляция работы
     orders = [
@@ -315,34 +316,30 @@ class ApiGatewayApp < Sinatra::Base
       { id: 3, product: 'Doohickey', quantity: 3, status: 'delivered' }
     ]
 
-    release_concurrent_slot!
+    # release_concurrent_slot!
 
     json(
-      client: {
-        id: @current_client.id,
-        name: @current_client.name,
-        tier: @current_client.tier
-      },
+      user_email: current_user&.email,
       orders: orders
     )
   end
 
   post '/api/orders' do
-    authenticate_api_key!
-    check_rate_limits!
+    # using Middleware::JwtAuth instead
+    # authenticate_api_key!
+    # check_rate_limits!
 
     order_data = json_params
 
-    # Симуляция создания заказа
+    # Simulation of order creation
     order = {
       id: rand(1000..9999),
       product: order_data['product'],
       quantity: order_data['quantity'],
       status: 'pending',
-      created_at: Time.now.to_i
+      created_at: Time.now.to_i,
+      created_by_user_id: request.env['api.user_id'] 
     }
-
-    release_concurrent_slot!
 
     status 201
     json(
