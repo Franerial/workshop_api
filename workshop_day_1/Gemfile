@@ -7,3 +7,4 @@ gem 'faraday'
 gem 'faraday-retry'
 gem 'concurrent-ruby'
 gem 'oj'  # Быстрый JSON
+gem 'semian'
